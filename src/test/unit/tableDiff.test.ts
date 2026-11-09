@@ -1,5 +1,8 @@
 import * as assert from "assert";
 import { parseTable } from "../../markdown/tableDiff";
+import { fixInvalidNesting } from "../../markdown/structuralDiff";
+import { areHtmlTagsBalanced } from "../../markdown/domUtils";
+import { MarkdownDiffProvider } from "../../markdownDiff";
 
 describe("parseTable", () => {
   it("should parse a simple table with thead and tbody", () => {
@@ -115,3 +118,28 @@ describe("parseTable", () => {
   });
 });
 
+
+describe("inserted table rows with inline markup", () => {
+  const base = "| A | B |\n|---|---|\n| x | y |\n";
+
+  for (const cell of ["`a`", "`a --b` c", "c `a b`", "**bold** and `code`"]) {
+    it(`highlights an added row whose cell is ${cell}`, () => {
+      const provider = new MarkdownDiffProvider();
+      const { html } = provider.computeDiff(base, `${base}| n | ${cell} |\n`);
+      assert.ok(areHtmlTagsBalanced(html), "the diff HTML stays balanced");
+      assert.ok(/<tr\b[^>]*class="diffins"/.test(html), "the added row is marked inserted");
+      assert.ok(!/<del\b[^>]*>\s*<table/i.test(html), "the table is not replaced as a whole");
+    });
+  }
+
+  it("keeps a closing inline tag inside the diff tag that opened it", () => {
+    assert.strictEqual(
+      fixInvalidNesting('<td><ins class="diffins"><code>a</code></ins></td>'),
+      '<td><ins class="diffins"><code>a</code></ins></td>',
+    );
+    assert.strictEqual(
+      fixInvalidNesting('<code><ins class="diffins">a</code> b</ins>'),
+      '<code><ins class="diffins">a b</ins></code>',
+    );
+  });
+});
