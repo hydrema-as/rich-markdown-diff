@@ -817,11 +817,21 @@ describe("MarkdownDiffProvider", () => {
     assert.ok(
       webviewContent.includes("if (sourceMax > 0 && targetMax > 0) {") &&
         webviewContent.includes(
-          "const percentage = sourcePane.scrollTop / sourceMax;",
+          "targetScrollTop = levelScrollTop(sourcePane, targetPane);",
         ) &&
-        webviewContent.includes("targetScrollTop = percentage * targetMax;") &&
         webviewContent.includes("let shouldMarkTargetScroll = false;"),
-      "Scroll sync should use percentage-based vertical mirroring during active scrolling and mark programmatic target updates for mirrored-event suppression",
+      "Scroll sync should level the panes during active scrolling and mark programmatic target updates for mirrored-event suppression",
+    );
+    assert.ok(
+      webviewContent.includes("const getScrollAnchors = () => {") &&
+        webviewContent.includes("const mapScrollAnchored = (y, sourcePane, targetPane) => {") &&
+        webviewContent.includes(
+          "const top = anchored === null ? (sourcePane.scrollTop / sourceMax) * targetMax : anchored;",
+        ) &&
+        webviewContent.includes(
+          "otherPane.scrollTop = levelScrollTop(targetPane, otherPane);",
+        ),
+      "Vertical sync and change navigation should map positions on the blocks both panes share, falling back to percentage mapping where none pair",
     );
     assert.ok(
       !webviewContent.includes(
