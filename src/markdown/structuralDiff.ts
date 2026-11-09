@@ -2647,6 +2647,15 @@ export function extractSharedReparentedLists(html: string): string {
   return result;
 }
 
+/**
+ * How many more opening than closing tags of the given name a fragment holds.
+ */
+function unclosedCount(fragment: string, tag: string): number {
+  const opens = (fragment.match(new RegExp(`<${tag}\\b`, "gi")) || []).length;
+  const closes = (fragment.match(new RegExp(`<\\/${tag}>`, "gi")) || []).length;
+  return opens - closes;
+}
+
 export function fixInvalidNesting(html: string): string {
   let fixed = html;
   // 0. Repair upstream htmldiff-js <sup> bug: htmldiff-js includes <sup> in specialCaseOpeningTagRegex
@@ -2682,6 +2691,11 @@ export function fixInvalidNesting(html: string): string {
       if (t2.toLowerCase() === "span" && /\bclass=["']?[^"']*\bkatex\b/i.test(match)) {
         return match;
       }
+      // The closing tag belongs inside when the diff tag opened it too, as in
+      // <ins><code>a</code></ins>, the shape of a whole inserted table cell.
+      if (unclosedCount(c1, t2) !== 0) {
+        return match;
+      }
       return `<${t1}${a1}>${c1}${c2}</${t1}></${t2}>`;
     },
   );
@@ -2704,6 +2718,11 @@ export function fixInvalidNesting(html: string): string {
     reversePattern,
     (match, itag, iattrs, c1, dtag, dattrs, c2, c3) => {
       if (itag.toLowerCase() === "span" && /\bkatex\b/i.test(iattrs)) {
+        return match;
+      }
+      // Only when the inline tag opened first is still open at the diff tag and
+      // the closing tag after c2 is its own, not one c1 or c2 opened.
+      if (unclosedCount(c1, itag) !== 0 || unclosedCount(c2, itag) !== 0) {
         return match;
       }
       const dclass = dtag === "ins" ? "diffins" : "diffdel";
