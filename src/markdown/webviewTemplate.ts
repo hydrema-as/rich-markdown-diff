@@ -3418,6 +3418,74 @@ export function getWebviewContent(
           emitRuntimeDiagnostics('startup-watchdog', { timeoutMs: 1500 }, { force: true });
         }, 1500);
 
+        // Anchored scroll mapping. Both panes hold the same diff HTML, the left hiding
+        // insertions and the right deletions, so their top-level blocks correspond by index,
+        // and a block with height in both panes is one the two sides share. Those pairs anchor
+        // the mapping: a position inside a paired block maps to the same fraction of its
+        // partner, and a position between two pairs (an insertion or deletion) to the same
+        // fraction of the gap between the partners.
+        let scrollAnchorCache = null;
+
+        const blockSpan = (el, pane, paneTop) => {
+            const rect = el.getBoundingClientRect();
+            if (rect.height <= 0) return null;
+            const top = rect.top - paneTop + pane.scrollTop;
+            return [top, top + rect.height];
+        };
+
+        const getScrollAnchors = () => {
+            const key = [leftPane.scrollHeight, rightPane.scrollHeight,
+                         leftPane.clientWidth, rightPane.clientWidth].join(',');
+            if (scrollAnchorCache && scrollAnchorCache.key === key) return scrollAnchorCache.pairs;
+            const left = Array.from(leftContent.children);
+            const right = Array.from(rightContent.children);
+            const pairs = [];
+            if (left.length === right.length) {
+                const leftTop = leftPane.getBoundingClientRect().top;
+                const rightTop = rightPane.getBoundingClientRect().top;
+                for (let i = 0; i < left.length; i++) {
+                    const l = blockSpan(left[i], leftPane, leftTop);
+                    const r = blockSpan(right[i], rightPane, rightTop);
+                    if (l && r) pairs.push({ left: l, right: r });
+                }
+            }
+            scrollAnchorCache = { key, pairs };
+            return pairs;
+        };
+
+        // Maps a vertical position in sourcePane to targetPane, or null where no blocks pair.
+        const mapScrollAnchored = (y, sourcePane, targetPane) => {
+            const pairs = getScrollAnchors();
+            if (pairs.length === 0) return null;
+            const from = sourcePane === leftPane ? 'left' : 'right';
+            const to = from === 'left' ? 'right' : 'left';
+            const points = [[0, 0]];
+            for (const pair of pairs) {
+                points.push([pair[from][0], pair[to][0]], [pair[from][1], pair[to][1]]);
+            }
+            points.push([sourcePane.scrollHeight, targetPane.scrollHeight]);
+            let lo = 0;
+            let hi = points.length - 1;
+            if (y <= points[lo][0]) return points[lo][1];
+            if (y >= points[hi][0]) return points[hi][1];
+            while (hi - lo > 1) {
+                const mid = (lo + hi) >> 1;
+                if (points[mid][0] <= y) lo = mid; else hi = mid;
+            }
+            const [s0, t0] = points[lo];
+            const [s1, t1] = points[hi];
+            return s1 > s0 ? t0 + (y - s0) / (s1 - s0) * (t1 - t0) : t0;
+        };
+
+        // The scrollTop of targetPane that keeps it level with sourcePane.
+        const levelScrollTop = (sourcePane, targetPane) => {
+            const sourceMax = sourcePane.scrollHeight - sourcePane.clientHeight;
+            const targetMax = targetPane.scrollHeight - targetPane.clientHeight;
+            const anchored = mapScrollAnchored(sourcePane.scrollTop, sourcePane, targetPane);
+            const top = anchored === null ? (sourcePane.scrollTop / sourceMax) * targetMax : anchored;
+            return Math.min(Math.max(top, 0), targetMax);
+        };
+
         function scrollToChange(index) {
             if (index < 0 || index >= changeElements.length) return;
             
@@ -3448,14 +3516,13 @@ export function getWebviewContent(
             const targetScrollTop = getGroupTargetScrollTop(groupMetrics, targetPane);
             targetPane.scrollTop = targetScrollTop;
 
-            // Sync the other pane proportionally to keep side-by-side aligned
+            // Level the other pane on the blocks both sides share
             if (!isInline) {
                 const otherPane = targetPane === leftPane ? rightPane : leftPane;
                 const sourceMax = targetPane.scrollHeight - targetPane.clientHeight;
                 const otherMax = otherPane.scrollHeight - otherPane.clientHeight;
                 if (sourceMax > 0 && otherMax > 0) {
-                    const pct = targetPane.scrollTop / sourceMax;
-                    otherPane.scrollTop = pct * otherMax;
+                    otherPane.scrollTop = levelScrollTop(targetPane, otherPane);
                 }
             }
 
@@ -3571,8 +3638,7 @@ export function getWebviewContent(
                 } else if (sourcePane.scrollTop >= sourceMax - 2) {
                   targetScrollTop = targetMax;
                 } else {
-                  const percentage = sourcePane.scrollTop / sourceMax;
-                  targetScrollTop = percentage * targetMax;
+                  targetScrollTop = levelScrollTop(sourcePane, targetPane);
                 }
 
                 if (Math.abs(targetPane.scrollTop - targetScrollTop) > 0.5) {
