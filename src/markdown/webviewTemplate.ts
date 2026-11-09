@@ -3786,8 +3786,26 @@ export function getWebviewContent(
              updateBreadcrumbs(rightPane, rightBreadcrumbs);
         });
 
+        // The Quick Edit a single click on the modified pane started, so a double
+        // click, whose first click starts one, can take it back.
+        let lastQuickEdit = null;
+        const QUICK_EDIT_DOUBLE_CLICK_MS = 800;
+
         // Double Click to Open Source (Whole File)
         document.body.addEventListener('dblclick', (e) => {
+            if (lastQuickEdit && performance.now() - lastQuickEdit.at < QUICK_EDIT_DOUBLE_CLICK_MS) {
+                const { lineStart } = lastQuickEdit;
+                lastQuickEdit = null;
+                BlockEditor.close();
+                statusMsg.textContent = '';
+                vscode.postMessage({
+                    command: 'openSource',
+                    side: 'modified',
+                    line: lineStart
+                });
+                return;
+            }
+
             // Check if click originated from toolbar or buttons
             if (e.target.closest('.toolbar') || e.target.closest('.block-editor-overlay')) {
                 return;
@@ -3894,10 +3912,10 @@ export function getWebviewContent(
             const lineStart = parseInt(lineAttr, 10);
             const lineEnd = parseInt(lineEl.getAttribute('data-line-end'), 10) || lineStart + 1;
 
-            // Optional: Delay slightly to see if it's a double click
-            // For now, let's just open the editor on single click. 
-            // If the user double clicks, the jump will happen anyway.
+            // Opens at once; the double-click handler closes it again when this
+            // click turns out to be the first of a double click.
             BlockEditor.start(lineEl, lineStart, lineEnd);
+            lastQuickEdit = { at: performance.now(), lineStart };
         });
 
         // --- Footnote Navigation Support ---

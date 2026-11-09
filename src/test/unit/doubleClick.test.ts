@@ -74,3 +74,24 @@ describe("Double Click Navigation", () => {
     );
   });
 });
+
+describe("Double click after a Quick Edit click", () => {
+  it("takes back the Quick Edit the first click started and opens the source", () => {
+    const webviewContent = new MarkdownDiffProvider().getWebviewContent(
+      "<p data-line=\"0\">a</p>",
+      "katex.css",
+      "mermaid.js",
+      "hljs-light.css",
+      "hljs-dark.css",
+    );
+    const dblclick = webviewContent.indexOf("document.body.addEventListener('dblclick'");
+    const takeBack = webviewContent.indexOf("BlockEditor.close();", dblclick);
+    const overlayGuard = webviewContent.indexOf("e.target.closest('.block-editor-overlay')", dblclick);
+    assert.ok(dblclick > -1 && takeBack > dblclick, "the double-click handler closes the Quick Edit");
+    assert.ok(takeBack < overlayGuard, "before the guard that ignores clicks inside the Quick Edit overlay");
+    assert.ok(
+      webviewContent.includes("lastQuickEdit = { at: performance.now(), lineStart };"),
+      "a single click records the Quick Edit it started",
+    );
+  });
+});
