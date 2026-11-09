@@ -18,5 +18,8 @@
   "rich-markdown-diff.insertedColor.description": "Custom background color for inserted diff elements (e.g. #e6ffec or rgba(46,160,67,0.15)).",
   "rich-markdown-diff.deletedColor.description": "Custom background color for deleted diff elements (e.g. #ffeef0 or rgba(248,81,73,0.15)).",
   "rich-markdown-diff.defaultViewMode.description": "Default layout view mode when opening a diff panel (side-by-side or inline).",
-  "rich-markdown-diff.defaultFoldUnchanged.description": "Whether to fold unchanged blocks by default when opening a diff panel."
+  "rich-markdown-diff.defaultFoldUnchanged.description": "Whether to fold unchanged blocks by default when opening a diff panel.",
+  "rich-markdown-diff.doubleClickAction.description": "What a double-click in a rendered diff opens.",
+  "rich-markdown-diff.doubleClickAction.openSource": "The clicked side's file, at the clicked block.",
+  "rich-markdown-diff.doubleClickAction.openModifiedBeside": "The modified file as a text editor beside the diff, at the clicked block, from either pane. It opens as text even where workbench.editorAssociations maps Markdown to a preview, so text-editor features such as comment threads are at hand while the rendered diff stays open."
 }

@@ -300,6 +300,19 @@
           "type": "boolean",
           "default": false,
           "description": "%rich-markdown-diff.defaultFoldUnchanged.description%"
+        },
+        "rich-markdown-diff.doubleClickAction": {
+          "type": "string",
+          "enum": [
+            "openSource",
+            "openModifiedBeside"
+          ],
+          "enumDescriptions": [
+            "%rich-markdown-diff.doubleClickAction.openSource%",
+            "%rich-markdown-diff.doubleClickAction.openModifiedBeside%"
+          ],
+          "default": "openSource",
+          "description": "%rich-markdown-diff.doubleClickAction.description%"
         }
       }
     },
