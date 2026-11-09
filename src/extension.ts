@@ -692,6 +692,35 @@ async function renderDiffPanel(
   return contentKey;
 }
 
+/**
+ * Opens the modified file as a text editor in the group beside the rendered
+ * diff, the cursor on the double-clicked block's line. It opens with the
+ * default text editor even where workbench.editorAssociations maps Markdown
+ * to a custom editor such as the Markdown preview, so features that live in
+ * the text editor, such as comment threads, are there.
+ */
+async function openModifiedBeside(uri: vscode.Uri, line: unknown) {
+  const options: vscode.TextDocumentShowOptions = {
+    viewColumn: vscode.ViewColumn.Beside,
+    preview: false,
+  };
+  if (typeof line === "number") {
+    const position = new vscode.Position(line, 0);
+    options.selection = new vscode.Range(position, position);
+  }
+  try {
+    await vscode.commands.executeCommand("vscode.openWith", uri, "default", options);
+    const editor = vscode.window.activeTextEditor;
+    if (editor && options.selection) {
+      editor.revealRange(options.selection, vscode.TextEditorRevealType.InCenter);
+    }
+  } catch (error) {
+    vscode.window.showErrorMessage(
+      l10n.t("Could not open file: {0}", String(error)),
+    );
+  }
+}
+
 async function bindDiffPanel(
   panel: vscode.WebviewPanel,
   context: vscode.ExtensionContext,
@@ -939,6 +968,19 @@ async function bindDiffPanel(
     }
 
     if (message.command !== "openSource" || !currentState) {
+      return;
+    }
+
+    if (
+      !message.page &&
+      vscode.workspace
+        .getConfiguration("rich-markdown-diff")
+        .get<string>("doubleClickAction", "openSource") === "openModifiedBeside"
+    ) {
+      await openModifiedBeside(
+        currentState.modifiedUri ?? currentState.fallbackSourceUri,
+        message.line,
+      );
       return;
     }
 

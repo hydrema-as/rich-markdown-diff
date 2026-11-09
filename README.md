@@ -90,6 +90,7 @@ You can customize the extension behavior via the following VS Code settings:
 | --- | --- | --- | --- |
 | `rich-markdown-diff.defaultViewMode` | `string` | `"side-by-side"` | Default layout view mode when opening a diff panel (`"side-by-side"` or `"inline"`). |
 | `rich-markdown-diff.defaultFoldUnchanged` | `boolean` | `false` | Whether to automatically fold unchanged Markdown blocks when opening a diff. |
+| `rich-markdown-diff.doubleClickAction` | `string` | `openSource` | What a double-click in a rendered diff opens: `openSource`, the clicked side's file at the clicked block, or `openModifiedBeside`, the modified file as a text editor beside the diff at the clicked block, even where `workbench.editorAssociations` maps Markdown to a preview. |
 | `rich-markdown-diff.insertedColor` | `string` | `""` | Custom background color for inserted diff elements (e.g. `#e6ffec` or `rgba(46,160,67,0.15)`). |
 | `rich-markdown-diff.deletedColor` | `string` | `""` | Custom background color for deleted diff elements (e.g. `#ffeef0` or `rgba(248,81,73,0.15)`). |
 | `rich-markdown-diff.showGutterMarkers` | `boolean` | `true` | Whether to show vertical diff markers in the gutter area. |
