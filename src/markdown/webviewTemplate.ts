@@ -3984,11 +3984,32 @@ export function getWebviewContent(
             lastQuickEdit = { at: performance.now(), lineStart };
         });
 
+        // Centre a target element in its pane, flash it, and bring the other pane along.
+        function jumpToTarget(pane, target) {
+            const paneHeight = pane.clientHeight;
+            const elTop = getRelativeTop(target, pane);
+            const elHeight = target.getBoundingClientRect().height || 20;
+            pane.scrollTop = Math.max(0, elTop - (paneHeight / 2) + (elHeight / 2));
+
+            target.classList.add('jump-highlight');
+            setTimeout(() => target.classList.remove('jump-highlight'), 1500);
+
+            if (!isInline) {
+                const otherPane = pane === leftPane ? rightPane : leftPane;
+                const sourceMax = pane.scrollHeight - pane.clientHeight;
+                const otherMax = otherPane.scrollHeight - otherPane.clientHeight;
+                if (sourceMax > 0 && otherMax > 0) {
+                    const pct = pane.scrollTop / sourceMax;
+                    otherPane.scrollTop = pct * otherMax;
+                }
+            }
+        }
+
         // --- Footnote Navigation Support ---
         document.body.addEventListener('click', (e) => {
             const anchor = e.target.closest('a');
             if (!anchor || !anchor.getAttribute('href')) return;
-            
+
             const href = anchor.getAttribute('href');
             // Support both default (fn1) and prefixed (fn-old-1) IDs
             if (href.startsWith('#fn')) {
@@ -4000,33 +4021,78 @@ export function getWebviewContent(
                     if (target) {
                         e.preventDefault();
                         e.stopPropagation();
-                        
-                        // Center the target in the pane
-                        const paneHeight = pane.clientHeight;
-                        const elTop = getRelativeTop(target, pane);
-                        const elHeight = target.getBoundingClientRect().height || 20;
-                        const targetScrollTop = elTop - (paneHeight / 2) + (elHeight / 2);
-                        
-                        pane.scrollTop = Math.max(0, targetScrollTop);
-                        
-                        // Highlight target temporarily
-                        target.classList.add('jump-highlight');
-                        setTimeout(() => target.classList.remove('jump-highlight'), 1500);
-                        
-                        // Sync other pane if in split mode
-                        if (!isInline) {
-                            const otherPane = pane === leftPane ? rightPane : leftPane;
-                            const sourceMax = pane.scrollHeight - pane.clientHeight;
-                            const otherMax = otherPane.scrollHeight - otherPane.clientHeight;
-                            if (sourceMax > 0 && otherMax > 0) {
-                                const pct = pane.scrollTop / sourceMax;
-                                otherPane.scrollTop = pct * otherMax;
-                            }
-                        }
+                        jumpToTarget(pane, target);
                     }
                 }
             }
         });
+
+        // --- Link Navigation ---
+        // The anchor VS Code's Markdown preview gives a heading (see links.ts slugify).
+        function headingSlug(text) {
+            return text.trim().toLowerCase()
+                .replace(/\\s+/g, '-')
+                .replace(/[\\][!/'"#$%&()*+,.:;<=>?@\\\\^{|}~\`。，、；：？！…—–·ˉ¨‘’“”々～‖∶＂＇｀｜〃〔〕〈〉《》「」『』．〖〗【】（）［］｛｝]/g, '')
+                .replace(/^-+/, '')
+                .replace(/-+$/, '');
+        }
+
+        // The element an in-page fragment names in one pane: an id or name,
+        // else the heading whose slug it is. A visible element is preferred,
+        // since each pane hides the other version's content.
+        function findFragmentTarget(pane, fragment) {
+            const isVisible = (el) => el.getClientRects().length > 0;
+            const named = Array.from(pane.querySelectorAll('[id], [name]')).filter(
+                (el) => el.id === fragment || el.getAttribute('name') === fragment,
+            );
+            const visibleNamed = named.find(isVisible);
+            if (visibleNamed || named.length) {
+                return visibleNamed || named[0];
+            }
+            const seen = new Map();
+            const wanted = fragment.toLowerCase();
+            for (const heading of pane.querySelectorAll('h1, h2, h3, h4, h5, h6')) {
+                if (!isVisible(heading)) continue;
+                const base = headingSlug(heading.textContent || '');
+                const count = seen.get(base) || 0;
+                seen.set(base, count + 1);
+                if ((count === 0 ? base : base + '-' + count) === wanted) {
+                    return heading;
+                }
+            }
+            return null;
+        }
+
+        // A click on a link follows it, plain or with Ctrl/Cmd, as in the
+        // Markdown preview and the text editor. It runs in the capture phase so
+        // that Quick Edit never sees the click. Footnotes, wikilinks and
+        // Obsidian links keep their own handlers.
+        document.addEventListener('click', (e) => {
+            if (e.button !== 0) return;
+            const anchor = e.target.closest('a[href]');
+            if (!anchor) return;
+            if (anchor.closest('.wikilink, .obsidian-tag, .obsidian-embed, .toolbar, .block-editor-overlay')) return;
+            const pane = anchor.closest('.pane');
+            if (!pane) return;
+            const href = anchor.getAttribute('href');
+            if (href.startsWith('#fn')) return;
+
+            e.preventDefault();
+            e.stopPropagation();
+
+            if (href.startsWith('#')) {
+                let fragment = href.substring(1);
+                try { fragment = decodeURIComponent(fragment); } catch (err) { /* keep it raw */ }
+                const target = findFragmentTarget(pane, fragment);
+                if (target) jumpToTarget(pane, target);
+                return;
+            }
+            vscode.postMessage({
+                command: 'openLink',
+                href: href,
+                side: pane.id === 'left-pane' ? 'original' : 'modified',
+            });
+        }, true);
 
         // --- Ghost Element Cleanup ---
         function cleanupGhosts() {
