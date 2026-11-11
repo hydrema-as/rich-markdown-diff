@@ -13,6 +13,7 @@ A professional VS Code extension for visual Markdown comparison. Compare rendere
 - **Git Blame**: Hover over any line in the diff view to instantly see its commit author and history.
 - **Interactive Image Diff**: Compare visual changes in images using "Swipe" and "Onion Skin" comparison modes.
 - **Quick Edit**: Modify image paths and frontmatter metadata directly within the preview panels.
+- **Link Navigation**: Click a link to follow it. In-page anchors scroll the pane; repository paths, including `/`-rooted ones and `#L42` line anchors, open in a text editor in the group `markdown.links.openLocation` names; web links open in the browser.
 - **Clipboard Compare**: Instantly compare any active Markdown file against your clipboard contents.
 - **HTML Export**: Save the entire diff view as a standalone HTML file. It preserves custom styles and client-side interactions, making it perfect for offline sharing and peer reviews in standard web browsers.
 

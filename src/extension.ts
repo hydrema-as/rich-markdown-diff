@@ -44,6 +44,7 @@ import {
   toFileBackedUri,
 } from "./commandTarget";
 import * as path from "path";
+import { classifyLink, lineForFragment, lineRangeOf } from "./markdown/links";
 import * as l10n from "@vscode/l10n";
 import { prepareExportHtml } from "./exportHtml";
 
@@ -938,6 +939,16 @@ async function bindDiffPanel(
       return;
     }
 
+    if (message.command === "openLink") {
+      if (typeof message.href === "string") {
+        await openLink(
+          message.href,
+          toFileBackedUri(currentState?.modifiedUri ?? currentState?.fallbackSourceUri ?? vscode.Uri.file("")),
+        );
+      }
+      return;
+    }
+
     if (message.command !== "openSource" || !currentState) {
       return;
     }
@@ -1344,6 +1355,10 @@ export function activate(context: vscode.ExtensionContext) {
 
       // Handle Double Click
       const messageDisposable = panel.webview.onDidReceiveMessage((message) => {
+        if (message.command === "openLink" && editor && typeof message.href === "string") {
+          void openLink(message.href, editor.document.uri);
+          return;
+        }
         if (message.command === "openSource") {
           const side = message.side;
           const line = message.line;
@@ -1788,6 +1803,99 @@ export function isPathInsideRoot(targetUri: vscode.Uri, baseUri: vscode.Uri): bo
     return !rel.startsWith("..") && !path.isAbsolute(rel);
   } catch {
     return false;
+  }
+}
+
+/**
+ * The root a "/"-prefixed link resolves against: the repository holding the
+ * file, else its workspace folder, else its own directory.
+ */
+async function linkRootFor(fileUri: vscode.Uri): Promise<vscode.Uri> {
+  let dir = vscode.Uri.joinPath(fileUri, "..");
+  for (let depth = 0; depth < 64; depth++) {
+    try {
+      await vscode.workspace.fs.stat(vscode.Uri.joinPath(dir, ".git"));
+      return dir;
+    } catch {
+      // No repository marker here; keep walking up.
+    }
+    const parent = vscode.Uri.joinPath(dir, "..");
+    if (parent.path === dir.path) {
+      break;
+    }
+    dir = parent;
+  }
+  return vscode.workspace.getWorkspaceFolder(fileUri)?.uri ?? vscode.Uri.joinPath(fileUri, "..");
+}
+
+/**
+ * Follows a link clicked in the rendered diff. Web and mail links open
+ * externally. A file link resolves against the modified file, or against its
+ * repository root when it starts with "/", and opens in the editor group
+ * markdown.links.openLocation names, at the line its fragment points at.
+ */
+export async function openLink(href: string, baseUri: vscode.Uri): Promise<void> {
+  const target = classifyLink(href);
+  if (!target || target.kind === "anchor") {
+    return;
+  }
+  if (target.kind === "external") {
+    await vscode.env.openExternal(vscode.Uri.parse(target.uri, true));
+    return;
+  }
+  if (target.path.includes("\0")) {
+    return;
+  }
+
+  const repositoryRoot = await linkRootFor(baseUri);
+  const root = target.rootRelative ? repositoryRoot : vscode.Uri.joinPath(baseUri, "..");
+  const targetUri = vscode.Uri.joinPath(root, target.path);
+  const inside = (outer: vscode.Uri) => {
+    const rel = path.relative(path.resolve(outer.fsPath), path.resolve(targetUri.fsPath));
+    return !rel.startsWith("..") && !path.isAbsolute(rel);
+  };
+  if (!isPathInsideRoot(targetUri, baseUri) && !inside(repositoryRoot)) {
+    vscode.window.showWarningMessage(l10n.t("Link target is outside the workspace: {0}", href));
+    return;
+  }
+
+  let document: vscode.TextDocument;
+  try {
+    document = await vscode.workspace.openTextDocument(targetUri);
+  } catch {
+    vscode.window.showWarningMessage(l10n.t("Link target not found: {0}", href));
+    return;
+  }
+
+  let selection: vscode.Range | undefined;
+  if (target.fragment) {
+    const lines = lineRangeOf(target.fragment);
+    const line = lines ? undefined : lineForFragment(document.getText(), target.fragment);
+    if (lines) {
+      const last = Math.min(lines.end, document.lineCount - 1);
+      selection = new vscode.Range(lines.start, 0, last, document.lineAt(last).text.length);
+    } else if (line !== undefined) {
+      selection = new vscode.Range(line, 0, line, 0);
+    }
+  }
+
+  const beside =
+    vscode.workspace.getConfiguration("markdown").get<string>("links.openLocation") === "beside";
+  const options: vscode.TextDocumentShowOptions = {
+    viewColumn: beside ? vscode.ViewColumn.Beside : vscode.ViewColumn.Active,
+    preview: false,
+    selection,
+  };
+  try {
+    // "default" is the text editor, whatever editor *.md is associated with,
+    // so the selection can be shown.
+    await vscode.commands.executeCommand("vscode.openWith", targetUri, "default", options);
+    const editor = vscode.window.activeTextEditor;
+    if (editor && selection) {
+      editor.revealRange(selection, vscode.TextEditorRevealType.InCenter);
+    }
+  } catch (error) {
+    vscode.window.showErrorMessage(l10n.t("Could not open file: {0}", String(error)));
   }
 }
 

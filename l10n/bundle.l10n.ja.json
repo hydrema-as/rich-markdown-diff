@@ -28,5 +28,7 @@
   "Error reading file: {0}": "ファイルの読み込みエラー: {0}",
   "Enjoying Rich Markdown Diff? Try 'Markdown Link Assistant' to manage your links effortlessly.": "Rich Markdown Diff はいかがですか？リンク管理を強力にサポートする 'Markdown Link Assistant' もぜひお試しください。",
   "Show Details": "詳細を見る",
-  "Later": "後で"
+  "Later": "後で",
+  "Link target not found: {0}": "リンク先が見つかりません: {0}",
+  "Link target is outside the workspace: {0}": "リンク先がワークスペースの外にあります: {0}"
 }

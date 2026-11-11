@@ -28,5 +28,7 @@
   "Error reading file: {0}": "Error reading file: {0}",
   "Enjoying Rich Markdown Diff? Try 'Markdown Link Assistant' to manage your links effortlessly.": "Enjoying Rich Markdown Diff? Try 'Markdown Link Assistant' to manage your links effortlessly.",
   "Show Details": "Show Details",
-  "Later": "Later"
+  "Later": "Later",
+  "Link target not found: {0}": "Link target not found: {0}",
+  "Link target is outside the workspace: {0}": "Link target is outside the workspace: {0}"
 }

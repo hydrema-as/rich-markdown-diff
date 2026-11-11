@@ -28,5 +28,7 @@
   "Error reading file: {0}": "读取文件时出错: {0}",
   "Enjoying Rich Markdown Diff? Try 'Markdown Link Assistant' to manage your links effortlessly.": "觉得 Rich Markdown Diff 好用吗？试试用 'Markdown Link Assistant' 轻松管理您的链接。",
   "Show Details": "查看详情",
-  "Later": "稍后"
+  "Later": "稍后",
+  "Link target not found: {0}": "未找到链接目标: {0}",
+  "Link target is outside the workspace: {0}": "链接目标位于工作区之外: {0}"
 }
