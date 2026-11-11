@@ -73,6 +73,11 @@ describe("Links", () => {
     assert.strictEqual(slugify("REQ-FLUSH-149 — Brake Threshold"), "req-flush-149--brake-threshold");
     assert.strictEqual(slugify("6.4 Enable Latch"), "64-enable-latch");
     assert.strictEqual(slugify("What's (new)?"), "whats-new");
+    assert.strictEqual(
+      slugify("REQ-PROP-125 — The flow→current curve is checked before use"),
+      "req-prop-125--the-flowcurrent-curve-is-checked-before-use",
+    );
+    assert.strictEqual(slugify("snake_case Ünïcode 3.25"), "snake_case-ünïcode-325");
   });
 
   it("finds the line an anchor or a heading fragment points at", () => {
@@ -104,7 +109,7 @@ describe("Links", () => {
     const source = /function headingSlug\(text\) \{[\s\S]*?\n {8}\}/.exec(html);
     assert.ok(source, "the webview defines headingSlug");
     const headingSlug = new Function(`${source[0]}; return headingSlug;`)() as (t: string) => string;
-    for (const heading of ["REQ-FLUSH-149 — Brake Threshold", "6.4 Enable Latch", "What's (new)? [x] a\\b `c`"]) {
+    for (const heading of ["REQ-FLUSH-149 — Brake Threshold", "6.4 Enable Latch", "What's (new)? [x] a\\b `c`", "flow→current _x_ Ünï"]) {
       assert.strictEqual(headingSlug(heading), slugify(heading));
     }
     assert.match(html, /command: 'openLink'[\s\S]*?\}, true\);/);

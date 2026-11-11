@@ -4028,13 +4028,11 @@ export function getWebviewContent(
         });
 
         // --- Link Navigation ---
-        // The anchor VS Code's Markdown preview gives a heading (see links.ts slugify).
+        // The anchor GitHub and the Markdown preview give a heading (see links.ts slugify).
         function headingSlug(text) {
             return text.trim().toLowerCase()
-                .replace(/\\s+/g, '-')
-                .replace(/[\\][!/'"#$%&()*+,.:;<=>?@\\\\^{|}~\`。，、；：？！…—–·ˉ¨‘’“”々～‖∶＂＇｀｜〃〔〕〈〉《》「」『』．〖〗【】（）［］｛｝]/g, '')
-                .replace(/^-+/, '')
-                .replace(/-+$/, '');
+                .replace(/[^\\p{L}\\p{N}\\p{M}\\p{Pc} -]/gu, '')
+                .replace(/ /g, '-');
         }
 
         // The element an in-page fragment names in one pane: an id or name,

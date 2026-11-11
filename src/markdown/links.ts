@@ -86,21 +86,17 @@ export function lineRangeOf(fragment: string): { start: number; end: number } | 
 }
 
 /**
- * The anchor VS Code's Markdown preview and GitHub give a heading: lower case,
- * whitespace to hyphens, punctuation removed. "REQ-1 — Brake Threshold"
- * becomes "req-1--brake-threshold".
+ * The anchor GitHub and VS Code's Markdown preview give a heading, as
+ * github-slugger makes it: lower case, every character but letters, digits,
+ * marks, "-", "_" and spaces removed, spaces to hyphens. "REQ-1 — Brake
+ * Threshold" becomes "req-1--brake-threshold", "flow→current" "flowcurrent".
  */
 export function slugify(heading: string): string {
   return heading
     .trim()
     .toLowerCase()
-    .replace(/\s+/g, "-")
-    .replace(
-      /[\][!/'"#$%&()*+,.:;<=>?@\\^{|}~`。，、；：？！…—–·ˉ¨‘’“”々～‖∶＂＇｀｜〃〔〕〈〉《》「」『』．〖〗【】（）［］｛｝]/g,
-      "",
-    )
-    .replace(/^-+/, "")
-    .replace(/-+$/, "");
+    .replace(/[^\p{L}\p{N}\p{M}\p{Pc} -]/gu, "")
+    .replace(/ /g, "-");
 }
 
 /** A heading's text as rendered: links reduced to their text, tags and emphasis markers dropped. */
@@ -109,7 +105,7 @@ function headingText(source: string): string {
     .replace(/\s+#+\s*$/, "")
     .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
     .replace(/<[^>]+>/g, "")
-    .replace(/[*_`~]/g, "");
+    .replace(/[*`]|~~/g, "");
 }
 
 function escapeRegExp(text: string): string {
