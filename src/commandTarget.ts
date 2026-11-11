@@ -351,6 +351,54 @@ export function getActiveRevisionComparison(): ComparisonUriPair | undefined {
   return getRevisionComparison(pair.originalUri, pair.modifiedUri);
 }
 
+/**
+ * Detects a comparison between two different files on disk, such as the diff
+ * `code --diff a.md b.md` opens, or one a tool opens against a copy of the
+ * file's earlier text.
+ *
+ * Neither side names a git ref, so the working tree and index modes cannot
+ * express the comparison, and whether the modified file is clean in git says
+ * nothing about whether the two sides differ.
+ *
+ * @param originalUri - The left side of the comparison, if known.
+ * @param modifiedUri - The right side of the comparison, if known.
+ * @returns Both sides when they are two different `file:` URIs, otherwise
+ *   undefined.
+ */
+export function getFileComparison(
+  originalUri: vscode.Uri | undefined,
+  modifiedUri: vscode.Uri | undefined,
+): ComparisonUriPair | undefined {
+  if (!originalUri || !modifiedUri) {
+    return undefined;
+  }
+
+  if (originalUri.scheme !== "file" || modifiedUri.scheme !== "file") {
+    return undefined;
+  }
+
+  return refersToSameFile(originalUri, modifiedUri)
+    ? undefined
+    : { originalUri, modifiedUri };
+}
+
+/**
+ * Reports the comparison between two files on disk shown by the diff editor
+ * that currently has focus, if it is one.
+ *
+ * @returns The two sides when the active tab is a text diff of two different
+ *   files, otherwise undefined.
+ */
+export function getActiveFileComparison(): ComparisonUriPair | undefined {
+  const pair = getActiveDiffTabUriPair();
+
+  if (!pair) {
+    return undefined;
+  }
+
+  return getFileComparison(pair.originalUri, pair.modifiedUri);
+}
+
 export const __test__ = {
   extractComparisonUris,
   inferComparisonHint,

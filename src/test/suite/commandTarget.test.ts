@@ -30,8 +30,10 @@ import * as vscode from "vscode";
 import {
   __test__,
   getActiveDiffTabUriPair,
+  getActiveFileComparison,
   getActiveRevisionComparison,
   getCommandTarget,
+  getFileComparison,
   getRevisionComparison,
   refersToSameFile,
 } from "../../commandTarget";
@@ -281,6 +283,77 @@ describe("Active Diff Tab Detection", () => {
     await vscode.window.showTextDocument(document);
 
     assert.strictEqual(getActiveDiffTabUriPair(), undefined);
+  });
+
+  it("should detect a diff of two files on disk as a file comparison", async () => {
+    const dir = await createTempDir();
+    const originalUri = await createMarkdownFile(dir, "base.md", "# One\n");
+    const modifiedUri = await createMarkdownFile(dir, "work.md", "# Two\n");
+
+    await vscode.commands.executeCommand(
+      "vscode.diff",
+      originalUri,
+      modifiedUri,
+      "base.md ↔ work.md",
+    );
+
+    const comparison = getActiveFileComparison();
+
+    assert.ok(comparison, "Expected a file comparison");
+    assert.strictEqual(
+      comparison?.originalUri.toString(),
+      originalUri.toString(),
+    );
+    assert.strictEqual(
+      comparison?.modifiedUri.toString(),
+      modifiedUri.toString(),
+    );
+    assert.strictEqual(getActiveRevisionComparison(), undefined);
+  });
+
+  it("should find no file comparison in a plain text editor", async () => {
+    const dir = await createTempDir();
+    const fileUri = await createMarkdownFile(dir, "single.md", "# Only\n");
+
+    const document = await vscode.workspace.openTextDocument(fileUri);
+    await vscode.window.showTextDocument(document);
+
+    assert.strictEqual(getActiveFileComparison(), undefined);
+  });
+});
+
+describe("File Comparison Detection", () => {
+  const fileUri = vscode.Uri.file("/repo/docs/example.md");
+  const copyUri = vscode.Uri.file("/repo/.git/review-diffs/docs/example.md");
+  const commitSha = "c02e3e4a1b2c3d4e5f60718293a4b5c6d7e8f901";
+
+  const gitUri = (ref: string) =>
+    fileUri.with({
+      scheme: "git",
+      query: JSON.stringify({ path: fileUri.fsPath, ref }),
+    });
+
+  it("should detect a comparison between two files", () => {
+    const comparison = getFileComparison(copyUri, fileUri);
+
+    assert.ok(comparison, "Expected a file comparison");
+    assert.strictEqual(comparison?.originalUri.toString(), copyUri.toString());
+    assert.strictEqual(comparison?.modifiedUri.toString(), fileUri.toString());
+  });
+
+  it("should ignore a file compared with itself", () => {
+    assert.strictEqual(getFileComparison(fileUri, fileUri), undefined);
+  });
+
+  it("should ignore comparisons with a git side", () => {
+    assert.strictEqual(getFileComparison(gitUri("HEAD"), fileUri), undefined);
+    assert.strictEqual(getFileComparison(gitUri("~"), fileUri), undefined);
+    assert.strictEqual(getFileComparison(gitUri(commitSha), fileUri), undefined);
+  });
+
+  it("should ignore comparisons with a missing side", () => {
+    assert.strictEqual(getFileComparison(fileUri, undefined), undefined);
+    assert.strictEqual(getFileComparison(undefined, fileUri), undefined);
   });
 });
 
