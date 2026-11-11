@@ -399,6 +399,49 @@ export function getActiveFileComparison(): ComparisonUriPair | undefined {
   return getFileComparison(pair.originalUri, pair.modifiedUri);
 }
 
+/** The view type of VS Code's built-in Markdown preview custom editor. */
+export const MARKDOWN_PREVIEW_VIEW_TYPE = "vscode.markdown.preview.editor";
+
+/**
+ * What the active tab says about the rendered diff where the active text
+ * editor cannot: a tab that is not a text editor leaves the text editor unset
+ * or pointing at another file.
+ *
+ * - `preview`: a Markdown preview, showing `uri`.
+ * - `opaque`: a tab whose input the API leaves undefined, such as a diff shown
+ *   in the Markdown preview; it names no file the command could render.
+ */
+export type ActiveTabTarget =
+  | { kind: "preview"; uri: vscode.Uri }
+  | { kind: "opaque" };
+
+/**
+ * Classifies the active tab for the rendered diff command.
+ *
+ * @returns The tab's target, or undefined when the active text editor decides,
+ *   as for a text editor, a text diff or an empty editor group.
+ */
+export function getActiveTabTarget(): ActiveTabTarget | undefined {
+  const activeTab = vscode.window.tabGroups.activeTabGroup?.activeTab;
+
+  if (!activeTab) {
+    return undefined;
+  }
+
+  if (activeTab.input === undefined) {
+    return { kind: "opaque" };
+  }
+
+  if (
+    activeTab.input instanceof vscode.TabInputCustom &&
+    activeTab.input.viewType === MARKDOWN_PREVIEW_VIEW_TYPE
+  ) {
+    return { kind: "preview", uri: activeTab.input.uri };
+  }
+
+  return undefined;
+}
+
 export const __test__ = {
   extractComparisonUris,
   inferComparisonHint,

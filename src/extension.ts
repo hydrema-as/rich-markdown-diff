@@ -38,9 +38,11 @@ import {
   getActiveDiffTabUriPair,
   getActiveFileComparison,
   getActiveRevisionComparison,
+  getActiveTabTarget,
   getCommandTarget,
   getFileUriFromCommandArg,
   getRevisionComparison,
+  MARKDOWN_PREVIEW_VIEW_TYPE,
   refersToSameFile,
   toFileBackedUri,
 } from "./commandTarget";
@@ -388,7 +390,7 @@ async function resolveMarkdownDocument(
     if (activeTab) {
       if (
         activeTab.input instanceof vscode.TabInputCustom &&
-        activeTab.input.viewType === "vscode.markdown.preview.editor"
+        activeTab.input.viewType === MARKDOWN_PREVIEW_VIEW_TYPE
       ) {
         document = await tryOpenMarkdownDocument(
           activeTab.input.uri,
@@ -510,6 +512,27 @@ async function updateRenderedDiffContext(
 ) {
   const myGen = ++contextUpdateGeneration;
 
+  // The active tab decides first where the text editor cannot. A Markdown
+  // preview is no text editor, so the file it shows is read from its tab, and
+  // the button is offered there only when that file has changes. A tab whose
+  // input the API leaves undefined - a diff shown in the Markdown preview, for
+  // one - gives the command no file pair to render, so it offers nothing.
+  const tabTarget = getActiveTabTarget();
+  if (tabTarget?.kind === "opaque") {
+    activeEditorRepositorySubscription?.dispose();
+    activeEditorRepositorySubscription = undefined;
+    await setCanShowRenderedDiff(false, myGen);
+    return;
+  }
+  if (tabTarget?.kind === "preview") {
+    await updateRenderedDiffContextForFile(
+      tabTarget.uri,
+      isDocumentDirty(tabTarget.uri),
+      myGen,
+    );
+    return;
+  }
+
   if (
     !editor ||
     (!isMarkdownPath(editor.document.uri.fsPath) &&
@@ -573,8 +596,28 @@ async function updateRenderedDiffContext(
       ? vscode.Uri.file(editorUri.fsPath)
       : editorUri;
 
-  const comparison = await resolveSingleFileComparison(
+  await updateRenderedDiffContextForFile(
     resolvedUri,
+    editor.document.isDirty,
+    myGen,
+  );
+}
+
+/**
+ * Sets the `canShowRenderedDiff` context key from one file's changes, and
+ * re-evaluates it when the file's repository changes.
+ *
+ * @param fileUri - The file on disk the active editor or preview shows.
+ * @param isDirty - Whether the file has unsaved edits.
+ * @param myGen - The generation of the update this belongs to.
+ */
+async function updateRenderedDiffContextForFile(
+  fileUri: vscode.Uri,
+  isDirty: boolean,
+  myGen: number,
+): Promise<void> {
+  const comparison = await resolveSingleFileComparison(
+    fileUri,
     "auto",
     undefined,
     { refreshStatus: false },
@@ -586,10 +629,7 @@ async function updateRenderedDiffContext(
   activeEditorRepositorySubscription?.dispose();
   activeEditorRepositorySubscription = undefined;
 
-  const canShow = isActionableSingleFileComparison(
-    comparison,
-    editor.document.isDirty,
-  );
+  const canShow = isActionableSingleFileComparison(comparison, isDirty);
   await setCanShowRenderedDiff(canShow, myGen);
 
   if (myGen !== contextUpdateGeneration) {
@@ -601,7 +641,7 @@ async function updateRenderedDiffContext(
     return;
   }
 
-  const repository = gitApi?.getRepository(resolvedUri);
+  const repository = gitApi?.getRepository(fileUri);
   if (!repository) {
     return;
   }
@@ -1128,6 +1168,20 @@ export function activate(context: vscode.ExtensionContext) {
       void updateRenderedDiffContext(editor);
     }),
     vscode.window.onDidChangeVisibleTextEditors(() => {
+      void updateRenderedDiffContext();
+    }),
+    // Moving between two tabs that are not text editors, a preview and a
+    // preview diff say, changes no text editor, so the tabs are watched too.
+    vscode.window.tabGroups.onDidChangeTabs((event) => {
+      if (
+        event.opened.length > 0 ||
+        event.closed.length > 0 ||
+        event.changed.some((tab) => tab.isActive)
+      ) {
+        void updateRenderedDiffContext();
+      }
+    }),
+    vscode.window.tabGroups.onDidChangeTabGroups(() => {
       void updateRenderedDiffContext();
     }),
     vscode.workspace.onDidChangeTextDocument((event) => {

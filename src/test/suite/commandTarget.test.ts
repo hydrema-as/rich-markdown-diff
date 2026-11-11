@@ -32,9 +32,11 @@ import {
   getActiveDiffTabUriPair,
   getActiveFileComparison,
   getActiveRevisionComparison,
+  getActiveTabTarget,
   getCommandTarget,
   getFileComparison,
   getRevisionComparison,
+  MARKDOWN_PREVIEW_VIEW_TYPE,
   refersToSameFile,
 } from "../../commandTarget";
 
@@ -440,5 +442,118 @@ describe("Active Revision Comparison", () => {
     await vscode.window.showTextDocument(document);
 
     assert.strictEqual(getActiveRevisionComparison(), undefined);
+  });
+});
+
+describe("Active Tab Target", () => {
+  const createdDirs: string[] = [];
+
+  async function createMarkdownFile(
+    dir: string,
+    name: string,
+    contents: string,
+  ): Promise<vscode.Uri> {
+    const filePath = path.join(dir, name);
+    await fs.writeFile(filePath, contents, "utf8");
+    return vscode.Uri.file(filePath);
+  }
+
+  async function createTempDir(): Promise<string> {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "rmd-tab-target-"));
+    createdDirs.push(dir);
+    return dir;
+  }
+
+  afterEach(async () => {
+    await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+    await vscode.workspace
+      .getConfiguration("workbench")
+      .update(
+        "editorAssociations",
+        undefined,
+        vscode.ConfigurationTarget.Global,
+      );
+    await Promise.all(
+      createdDirs.splice(0).map(async (dir) => {
+        try {
+          await fs.rm(dir, { recursive: true, force: true });
+        } catch {
+          // Leave the directory for the OS to reclaim.
+        }
+      }),
+    );
+  });
+
+  it("names the file a Markdown preview shows", async () => {
+    const dir = await createTempDir();
+    const fileUri = await createMarkdownFile(dir, "shown.md", "# Shown\n");
+
+    await vscode.commands.executeCommand(
+      "vscode.openWith",
+      fileUri,
+      MARKDOWN_PREVIEW_VIEW_TYPE,
+    );
+
+    const target = getActiveTabTarget();
+
+    assert.strictEqual(target?.kind, "preview");
+    assert.strictEqual(
+      target?.kind === "preview" ? target.uri.toString() : undefined,
+      fileUri.toString(),
+    );
+  });
+
+  it("finds a diff shown in the Markdown preview opaque", async () => {
+    const dir = await createTempDir();
+    const originalUri = await createMarkdownFile(dir, "base.md", "# One\n");
+    const modifiedUri = await createMarkdownFile(dir, "work.md", "# Two\n");
+
+    await vscode.workspace
+      .getConfiguration("workbench")
+      .update(
+        "editorAssociations",
+        { "*.md": MARKDOWN_PREVIEW_VIEW_TYPE },
+        vscode.ConfigurationTarget.Global,
+      );
+    await vscode.commands.executeCommand(
+      "vscode.diff",
+      originalUri,
+      modifiedUri,
+      "base.md ↔ work.md",
+    );
+
+    const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab;
+    assert.ok(activeTab, "Expected the diff to open in a tab");
+    assert.strictEqual(
+      activeTab?.input,
+      undefined,
+      "Expected the API to leave a preview diff's input undefined",
+    );
+    assert.deepStrictEqual(getActiveTabTarget(), { kind: "opaque" });
+  });
+
+  it("leaves a text editor to the active text editor", async () => {
+    const dir = await createTempDir();
+    const fileUri = await createMarkdownFile(dir, "text.md", "# Text\n");
+
+    const document = await vscode.workspace.openTextDocument(fileUri);
+    await vscode.window.showTextDocument(document);
+
+    assert.strictEqual(getActiveTabTarget(), undefined);
+  });
+
+  it("leaves a text diff to the active text editor", async () => {
+    const dir = await createTempDir();
+    const originalUri = await createMarkdownFile(dir, "left.md", "# One\n");
+    const modifiedUri = await createMarkdownFile(dir, "right.md", "# Two\n");
+
+    await vscode.commands.executeCommand(
+      "vscode.diff",
+      originalUri,
+      modifiedUri,
+      "left.md ↔ right.md",
+    );
+
+    assert.strictEqual(getActiveTabTarget(), undefined);
   });
 });
