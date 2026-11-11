@@ -766,6 +766,51 @@ export function balanceDiffTags(html: string): string {
   return balanced;
 }
 
+const WHITESPACE_ONLY_DEL = String.raw`<del\b[^>]*>(?:\s|&nbsp;)+<\/del>`;
+const WHITESPACE_ONLY_INS = String.raw`<ins\b[^>]*>(?:\s|&nbsp;)+<\/ins>`;
+const WHITESPACE_REPLACEMENT = new RegExp(
+  `${WHITESPACE_ONLY_DEL}\\s*${WHITESPACE_ONLY_INS}|${WHITESPACE_ONLY_INS}\\s*${WHITESPACE_ONLY_DEL}`,
+  "gi",
+);
+const BLOCK_TAG =
+  "(?:p|li|ul|ol|div|table|thead|tbody|tfoot|tr|td|th|h[1-6]|blockquote|section|pre|hr|dl|dt|dd|details|summary)";
+// A block tag next to the whitespace, past any diff tags wrapping either.
+const DIFF_TAGS = String.raw`(?:\s*<\/?(?:ins|del)\b[^>]*>)*`;
+const BLOCK_TAG_BEFORE = new RegExp(`<\\/?${BLOCK_TAG}\\b[^>]*>${DIFF_TAGS}\\s*$`, "i");
+const BLOCK_TAG_AFTER = new RegExp(`^${DIFF_TAGS}\\s*<\\/?${BLOCK_TAG}\\b`, "i");
+
+/**
+ * Removes diff tags that hold nothing, or only whitespace between blocks.
+ *
+ * Whitespace inside running text is a word separator, so a diff tag holding
+ * only that whitespace is kept: re-wrapping a paragraph turns a space into a
+ * soft line break, and htmldiff reports that as a whitespace-only change.
+ * Dropping it would merge the words either side of the break in the pane that
+ * shows it. A deleted and an inserted run of whitespace side by side become a
+ * plain space, since both versions have one there.
+ */
+export function removeEmptyDiffTags(html: string): string {
+  const result = html
+    .replace(/<(ins|del)[^>]*><\/\1>/gi, "")
+    .replace(WHITESPACE_REPLACEMENT, " ");
+  return result.replace(
+    /<(ins|del)[^>]*>(?:\s|&nbsp;)*<\/\1>/gi,
+    (match, _tag, offset: number, whole: string) => {
+      if (!/^<[^>]*>\s+</.test(match)) {
+        return match; // &nbsp; is a visible space, kept wherever it is
+      }
+      const end = offset + match.length;
+      const before = whole.slice(Math.max(0, offset - 200), offset);
+      const after = whole.slice(end, end + 200);
+      const atStart = offset <= 200 && before.trim() === "";
+      const atEnd = whole.length - end <= 200 && after.trim() === "";
+      return atStart || atEnd || BLOCK_TAG_BEFORE.test(before) || BLOCK_TAG_AFTER.test(after)
+        ? ""
+        : match;
+    },
+  );
+}
+
 export function cleanupUnbalancedDiffTags(html: string): string {
   // Protect pre/code blocks from having whitespace/newline diff tags stripped
   const preBlocks: string[] = [];
@@ -790,7 +835,7 @@ export function cleanupUnbalancedDiffTags(html: string): string {
   result = flattenDiffNesting(result);
 
   // Remove empty diff tags
-  result = result.replace(/<(ins|del)[^>]*>\s*<\/\1>/gi, "");
+  result = removeEmptyDiffTags(result);
 
   // Final balance pass in case empty tag removal exposed an outer pair
   result = balanceDiffTags(result);
