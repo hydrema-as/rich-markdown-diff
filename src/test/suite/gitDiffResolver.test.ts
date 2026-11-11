@@ -25,6 +25,7 @@
 import * as assert from "assert";
 import * as vscode from "vscode";
 import {
+  collectChangedPaths,
   describeComparisonSide,
   getComparisonHintFromUris,
   getGitUriRef,
@@ -64,6 +65,9 @@ class FakeRepository implements GitRepository {
 
 function createGitApi(repository: GitRepository): GitApi {
   return {
+    repositories: [repository],
+    onDidOpenRepository: new vscode.EventEmitter<GitRepository>().event,
+    onDidCloseRepository: new vscode.EventEmitter<GitRepository>().event,
     getRepository: () => repository,
     toGitUri: (uri, ref) =>
       uri.with({
@@ -300,5 +304,47 @@ describe("Comparison Side Labels", () => {
   it("should label the working tree side", () => {
     assert.strictEqual(describeComparisonSide(gitUri("~")), "Working Tree");
     assert.strictEqual(describeComparisonSide(fileUri), "Working Tree");
+  });
+});
+
+describe("Changed Paths", () => {
+  const change = (fsPath: string): GitChange => ({
+    uri: vscode.Uri.file(fsPath),
+  });
+  const isMarkdown = (fsPath: string) => fsPath.endsWith(".md");
+
+  it("lists staged, unstaged and untracked files once each", () => {
+    const repository = new FakeRepository({
+      indexChanges: [change("/repo/a.md")],
+      workingTreeChanges: [change("/repo/a.md"), change("/repo/b.md")],
+      untrackedChanges: [change("/repo/c.md")],
+    });
+
+    assert.deepStrictEqual(collectChangedPaths([repository], isMarkdown), [
+      vscode.Uri.file("/repo/a.md").fsPath,
+      vscode.Uri.file("/repo/b.md").fsPath,
+      vscode.Uri.file("/repo/c.md").fsPath,
+    ]);
+  });
+
+  it("keeps only the paths the filter accepts, across repositories", () => {
+    const first = new FakeRepository({
+      workingTreeChanges: [change("/one/doc.md"), change("/one/code.c")],
+    });
+    const second = new FakeRepository({
+      indexChanges: [change("/two/notes.md")],
+    });
+
+    assert.deepStrictEqual(collectChangedPaths([first, second], isMarkdown), [
+      vscode.Uri.file("/one/doc.md").fsPath,
+      vscode.Uri.file("/two/notes.md").fsPath,
+    ]);
+  });
+
+  it("lists nothing for clean repositories", () => {
+    assert.deepStrictEqual(
+      collectChangedPaths([new FakeRepository({})], isMarkdown),
+      [],
+    );
   });
 });

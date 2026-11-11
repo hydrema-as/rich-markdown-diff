@@ -26,6 +26,7 @@ import * as vscode from "vscode";
 import { ConflictEditorProvider } from "./conflictEditorProvider";
 import { MarkdownDiffProvider } from "./markdownDiff";
 import {
+  collectChangedPaths,
   describeComparisonSide,
   GitRepository,
   resolveSingleFileComparison,
@@ -505,6 +506,49 @@ async function setCanShowRenderedDiff(
     "rich-markdown-diff.canShowRenderedDiff",
     canShow,
   );
+}
+
+/** The context key listing the Markdown files git reports changes for. */
+const CHANGED_MARKDOWN_PATHS = "rich-markdown-diff.changedMarkdownPaths";
+
+/**
+ * Keeps the `changedMarkdownPaths` context key listing every Markdown file git
+ * reports changes for, so the title bar button can test the tab's own
+ * resource. That is the one test that also reaches a diff shown in the
+ * Markdown preview, whose files the extension cannot read: VS Code still sets
+ * the tab's `resourcePath`, and the command renders such a file's changes.
+ *
+ * @param context - The extension context that owns the subscriptions.
+ */
+async function trackChangedMarkdownPaths(
+  context: vscode.ExtensionContext,
+): Promise<void> {
+  const gitApi = await tryGetGitApi();
+
+  if (!gitApi) {
+    return;
+  }
+
+  const publish = () => {
+    void vscode.commands.executeCommand(
+      "setContext",
+      CHANGED_MARKDOWN_PATHS,
+      collectChangedPaths(gitApi.repositories, isMarkdownPath),
+    );
+  };
+  const watch = (repository: GitRepository) => {
+    context.subscriptions.push(repository.state.onDidChange(publish));
+  };
+
+  gitApi.repositories.forEach(watch);
+  context.subscriptions.push(
+    gitApi.onDidOpenRepository((repository) => {
+      watch(repository);
+      publish();
+    }),
+    gitApi.onDidCloseRepository(publish),
+  );
+  publish();
 }
 
 async function updateRenderedDiffContext(
@@ -1198,6 +1242,7 @@ export function activate(context: vscode.ExtensionContext) {
     }),
   );
   void updateRenderedDiffContext();
+  void trackChangedMarkdownPaths(context);
   vscode.commands.executeCommand(
     "setContext",
     "rich-markdown-diff.isDiffActive",

@@ -56,8 +56,45 @@ export interface GitRepository {
 }
 
 export interface GitApi {
+  readonly repositories: readonly GitRepository[];
+  readonly onDidOpenRepository: vscode.Event<GitRepository>;
+  readonly onDidCloseRepository: vscode.Event<GitRepository>;
   getRepository(uri: vscode.Uri): GitRepository | null;
   toGitUri(uri: vscode.Uri, ref: string): vscode.Uri;
+}
+
+/**
+ * Lists the files with changes git knows of - staged, unstaged or untracked -
+ * across the given repositories, each once, as file system paths.
+ *
+ * @param repositories - The repositories to read.
+ * @param include - Keeps a path in the list, such as a Markdown path test.
+ * @returns The paths, in the order git reports them.
+ */
+export function collectChangedPaths(
+  repositories: readonly GitRepository[],
+  include: (fsPath: string) => boolean,
+): string[] {
+  const paths = new Set<string>();
+
+  for (const repository of repositories) {
+    const { indexChanges, workingTreeChanges, untrackedChanges } =
+      repository.state;
+
+    for (const change of [
+      ...indexChanges,
+      ...workingTreeChanges,
+      ...(untrackedChanges ?? []),
+    ]) {
+      const fsPath = change.uri.fsPath;
+
+      if (include(fsPath)) {
+        paths.add(fsPath);
+      }
+    }
+  }
+
+  return [...paths];
 }
 
 interface GitExtension {
