@@ -182,7 +182,7 @@
         {
           "command": "rich-markdown-diff.showRenderedDiff",
           "group": "navigation",
-          "when": "(resourceLangId == markdown && (rich-markdown-diff.canShowRenderedDiff || isInDiffEditor)) || (editorLangId == markdown && rich-markdown-diff.canShowRenderedDiff) || activeWebviewPanelId == 'markdown.preview' || activeCustomEditorId == 'vscode.markdown.preview.editor'"
+          "when": "((resourceLangId == markdown && (rich-markdown-diff.canShowRenderedDiff || isInDiffEditor)) || (editorLangId == markdown && rich-markdown-diff.canShowRenderedDiff) || activeWebviewPanelId == 'markdown.preview' || activeCustomEditorId == 'vscode.markdown.preview.editor') && activeEditor != 'workbench.editors.binaryResourceDiffEditor'"
         },
         {
           "command": "rich-markdown-diff.prevChange",
