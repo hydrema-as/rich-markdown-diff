@@ -36,6 +36,7 @@ import {
   CommandTarget,
   ComparisonUriPair,
   getActiveDiffTabUriPair,
+  getActiveFileComparison,
   getActiveRevisionComparison,
   getCommandTarget,
   getFileUriFromCommandArg,
@@ -544,13 +545,15 @@ async function updateRenderedDiffContext(
     return;
   }
 
-  // A committed revision diff (opened from the Source Control Graph, say) is
-  // renderable, but the comparison resolved below only sees the working tree
-  // and index and would classify the file as unchanged. Detect it from the
-  // active diff tab so the editor context menu offers the command too, matching
-  // the title bar button that the diff editor already shows. The markdown check
-  // stops a non-markdown diff in another editor group from enabling the key.
-  const activeRevision = getActiveRevisionComparison();
+  // A committed revision diff (opened from the Source Control Graph, say) or a
+  // diff of two files on disk is renderable, but the comparison resolved below
+  // only sees the working tree and index and would classify the file as
+  // unchanged. Detect it from the active diff tab so the editor context menu
+  // offers the command too, matching the title bar button that the diff editor
+  // already shows. The markdown check stops a non-markdown diff in another
+  // editor group from enabling the key.
+  const activeRevision =
+    getActiveRevisionComparison() ?? getActiveFileComparison();
   if (
     activeRevision &&
     isMarkdownPath(toFileBackedUri(activeRevision.modifiedUri).fsPath)
@@ -1483,6 +1486,20 @@ export function activate(context: vscode.ExtensionContext) {
       return;
     }
 
+    // A diff of two files on disk names no git ref, and the modified file
+    // being clean in git says nothing about whether the two sides differ, so
+    // render the two files the focused diff tab shows.
+    const fileComparison = resolveActiveFileComparison(targetUri);
+
+    if (fileComparison) {
+      await showTwoFilesDiff(
+        fileComparison.originalUri,
+        fileComparison.modifiedUri,
+        context,
+      );
+      return;
+    }
+
     const initialComparison = await resolveSingleFileComparison(
       targetUri,
       comparisonHint,
@@ -1637,6 +1654,35 @@ function resolveRevisionComparison(
   }
 
   return getRevisionComparison(activePair.originalUri, activePair.modifiedUri);
+}
+
+/**
+ * Finds the comparison between two files on disk that the focused diff tab
+ * shows, when the command acts on one of its sides.
+ *
+ * Either side may be the target: the editor title bar passes the side that has
+ * focus.
+ *
+ * @param targetUri - The file the command is acting on.
+ * @returns Both sides of the focused file diff, or undefined when the focused
+ *   tab is not a diff of two files or shows another file.
+ */
+function resolveActiveFileComparison(
+  targetUri: vscode.Uri,
+): ComparisonUriPair | undefined {
+  const pair = getActiveFileComparison();
+
+  if (
+    !pair ||
+    !(
+      refersToSameFile(pair.modifiedUri, targetUri) ||
+      refersToSameFile(pair.originalUri, targetUri)
+    )
+  ) {
+    return undefined;
+  }
+
+  return pair;
 }
 
 /**
