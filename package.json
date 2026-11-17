@@ -300,6 +300,16 @@
           "type": "boolean",
           "default": false,
           "description": "%rich-markdown-diff.defaultFoldUnchanged.description%"
+        },
+        "rich-markdown-diff.previewExtensions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "tillahoffmann.markdown-markup"
+          ],
+          "markdownDescription": "%rich-markdown-diff.previewExtensions.description%"
         }
       }
     },

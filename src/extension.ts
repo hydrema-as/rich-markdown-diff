@@ -46,6 +46,11 @@ import {
 import * as path from "path";
 import * as l10n from "@vscode/l10n";
 import { prepareExportHtml } from "./exportHtml";
+import {
+  getPreviewAssets,
+  getPreviewExtensions,
+  getPreviewPlugins,
+} from "./previewExtensions";
 
 /**
  * Escapes HTML special characters to prevent XSS in webview content.
@@ -267,6 +272,7 @@ function getDiffPanelOptions(context: vscode.ExtensionContext) {
       vscode.Uri.joinPath(context.extensionUri, "media"),
       vscode.Uri.joinPath(context.extensionUri, "data"),
       ...(vscode.workspace.workspaceFolders?.map((folder) => folder.uri) ?? []),
+      ...getPreviewExtensions().map((ext) => ext.extensionUri),
     ],
   };
 }
@@ -613,6 +619,7 @@ async function renderDiffPanel(
   diffProvider: MarkdownDiffProvider,
   state: DiffPanelState,
   lastContentKey?: string,
+  previewExtensions: vscode.Extension<unknown>[] = [],
 ): Promise<string> {
   const originalContent = await readDocumentText(state.originalUri);
   const modifiedContent = await readDocumentText(state.modifiedUri);
@@ -662,6 +669,9 @@ async function renderDiffPanel(
     context.extensionUri,
     assets.katexFontBaseUri,
   );
+  const previewAssets = getPreviewAssets(previewExtensions);
+  const toWebviewUri = (uri: vscode.Uri) =>
+    panel.webview.asWebviewUri(uri).toString();
 
   const html = diffProvider.getWebviewContent(
     diffHtml,
@@ -686,6 +696,10 @@ async function renderDiffPanel(
     deletedColor,
     defaultViewMode,
     defaultFoldUnchanged,
+    {
+      styles: previewAssets.styles.map(toWebviewUri),
+      scripts: previewAssets.scripts.map(toWebviewUri),
+    },
   );
   panel.webview.html = html;
 
@@ -699,7 +713,13 @@ async function bindDiffPanel(
 ) {
   attachPanelTracking(panel);
 
-  const diffProvider = new MarkdownDiffProvider();
+  // The extensions whose Markdown preview plugins, styles and scripts the
+  // diff uses too, so what they render in the preview, such as review
+  // comments, shows in the diff.
+  const previewExtensions = getPreviewExtensions();
+  const diffProvider = new MarkdownDiffProvider(
+    getPreviewPlugins(previewExtensions),
+  );
   const debounceDelay = 300;
   let timeout: NodeJS.Timeout | undefined;
   let currentState: DiffPanelState | undefined;
@@ -778,6 +798,7 @@ async function bindDiffPanel(
         diffProvider,
         nextState,
         lastContentKey,
+        previewExtensions,
       );
 
       if (isDisposed) {

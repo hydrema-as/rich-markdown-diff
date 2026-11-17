@@ -18,5 +18,6 @@
   "rich-markdown-diff.insertedColor.description": "Custom background color for inserted diff elements (e.g. #e6ffec or rgba(46,160,67,0.15)).",
   "rich-markdown-diff.deletedColor.description": "Custom background color for deleted diff elements (e.g. #ffeef0 or rgba(248,81,73,0.15)).",
   "rich-markdown-diff.defaultViewMode.description": "Default layout view mode when opening a diff panel (side-by-side or inline).",
-  "rich-markdown-diff.defaultFoldUnchanged.description": "Whether to fold unchanged blocks by default when opening a diff panel."
+  "rich-markdown-diff.defaultFoldUnchanged.description": "Whether to fold unchanged blocks by default when opening a diff panel.",
+  "rich-markdown-diff.previewExtensions.description": "Extensions whose Markdown preview contributions the rendered diff uses too, as the built-in preview does: their markdown-it plugins (`extendMarkdownIt`), preview styles and preview scripts. Each entry is an extension ID such as `tillahoffmann.markdown-markup`, whose review comments then show in the diff. An extension that is not installed is skipped. A change applies to diffs opened after it."
 }

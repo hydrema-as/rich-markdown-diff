@@ -38,6 +38,7 @@ import {
 } from "./markdown/marpRenderer";
 import {
   createMarkdownRenderer,
+  injectLineNumbers,
   loadMarkdownPlugins,
 } from "./markdown/renderer";
 import {
@@ -174,10 +175,17 @@ export class MarkdownDiffProvider {
 
   /**
    * Initializes the Markdown renderer and its plugins.
+   *
+   * @param extraPlugins - markdown-it plugins other extensions contribute to
+   *   the Markdown preview, applied after the renderer's own.
    */
-  constructor() {
+  constructor(
+    extraPlugins?:
+      | ReadonlyArray<(md: MarkdownIt) => unknown>
+      | Promise<ReadonlyArray<(md: MarkdownIt) => unknown>>,
+  ) {
     this.md = createMarkdownRenderer();
-    this.readyPromise = this.loadPlugins();
+    this.readyPromise = this.loadPlugins(extraPlugins);
   }
 
   /**
@@ -190,8 +198,25 @@ export class MarkdownDiffProvider {
   /**
    * Asynchronously loads Markdown-it plugins that are ESM-only or heavy.
    */
-  private async loadPlugins() {
+  private async loadPlugins(
+    extraPlugins?:
+      | ReadonlyArray<(md: MarkdownIt) => unknown>
+      | Promise<ReadonlyArray<(md: MarkdownIt) => unknown>>,
+  ) {
     this.marp = await loadMarkdownPlugins(this.md);
+    let applied = false;
+    for (const plugin of (await extraPlugins) ?? []) {
+      try {
+        plugin(this.md);
+        applied = true;
+      } catch (error) {
+        console.warn("A Markdown preview plugin failed to load:", error);
+      }
+    }
+    if (applied) {
+      // A plugin that replaced a block's renderer dropped its line numbers.
+      injectLineNumbers(this.md);
+    }
   }
 
   /**
@@ -495,6 +520,7 @@ export class MarkdownDiffProvider {
     deletedColor: string = "",
     defaultViewMode: string = "side-by-side",
     defaultFoldUnchanged: boolean = false,
+    previewAssets?: { styles: string[]; scripts: string[] },
   ): string {
     return getWebviewContent(
       wrapTablesForScrolling(diffHtml),
@@ -516,6 +542,7 @@ export class MarkdownDiffProvider {
       deletedColor,
       defaultViewMode,
       defaultFoldUnchanged,
+      previewAssets,
     );
   }
 }
