@@ -428,6 +428,25 @@ async function readDocumentText(uri?: vscode.Uri): Promise<string> {
     return "";
   }
 
+  // A file with unsaved edits is read from its open document, which is what
+  // the engineer sees. Any other file is read from disk, since the document
+  // VS Code keeps for a file can still hold its earlier text when the event
+  // for a change made on disk arrives.
+  if (uri.scheme === "file" && !isDocumentDirty(uri)) {
+    try {
+      return new TextDecoder("utf-8").decode(
+        await vscode.workspace.fs.readFile(uri),
+      );
+    } catch (error) {
+      console.warn(
+        "Failed to read file for Markdown diff:",
+        uri.toString(),
+        error,
+      );
+      return "";
+    }
+  }
+
   try {
     const document = await vscode.workspace.openTextDocument(uri);
     return document.getText();
@@ -709,6 +728,44 @@ async function bindDiffPanel(
   let isUpdating = false;
   let queuedTrigger: DiffPanelUpdateTrigger | undefined;
   let lastContentKey: string | undefined;
+  const fileWatchers = new Map<string, vscode.FileSystemWatcher>();
+
+  /**
+   * Watches each watched file on disk too, so the diff follows a change no
+   * open editor sees. A document event fires only for a file open in an
+   * editor, and a tool or an agent writes the file directly. A file replaced
+   * whole, as a rebase does, arrives as a create.
+   */
+  const watchFilesOnDisk = (uris: readonly vscode.Uri[]) => {
+    const wanted = new Map(
+      uris
+        .filter((uri) => uri.scheme === "file")
+        .map((uri) => [uri.toString(), uri] as const),
+    );
+    for (const [key, watcher] of fileWatchers) {
+      if (!wanted.has(key)) {
+        watcher.dispose();
+        fileWatchers.delete(key);
+      }
+    }
+    for (const [key, uri] of wanted) {
+      if (fileWatchers.has(key)) {
+        continue;
+      }
+      const watcher = vscode.workspace.createFileSystemWatcher(
+        new vscode.RelativePattern(
+          vscode.Uri.file(path.dirname(uri.fsPath)),
+          path.basename(uri.fsPath),
+        ),
+        false,
+        false,
+        true,
+      );
+      watcher.onDidChange(() => scheduleUpdate("document"));
+      watcher.onDidCreate(() => scheduleUpdate("document"));
+      fileWatchers.set(key, watcher);
+    }
+  };
 
   const scheduleUpdate = (trigger: DiffPanelUpdateTrigger) => {
     if (timeout) {
@@ -763,6 +820,7 @@ async function bindDiffPanel(
       }
 
       currentState = nextState;
+      watchFilesOnDisk(nextState.watchUris);
 
       if (currentRepository !== nextState.repository) {
         repositorySubscription?.dispose();
@@ -833,6 +891,8 @@ async function bindDiffPanel(
     documentSubscription.dispose();
     configSubscription.dispose();
     repositorySubscription?.dispose();
+    fileWatchers.forEach((watcher) => watcher.dispose());
+    fileWatchers.clear();
     if (timeout) {
       clearTimeout(timeout);
     }
