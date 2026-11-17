@@ -2486,10 +2486,40 @@ export function getWebviewContent(
           emitRuntimeDiagnostics('unhandled-rejection', reason, { force: true });
         });
 
-        let isInline = false;
+        let isInline = document.body.classList.contains('inline-mode');
         let isFolded = false;
         let changeElements = [];
         let currentChangeIndex = -1;
+
+        // The extension replaces the whole page whenever a diffed file changes,
+        // a comment added in the editor beside the diff included. The reader's
+        // place - view mode, folding and scroll position - is kept in the
+        // webview's state, which outlasts the page, and restorePlace below takes
+        // it up again on the new page.
+        const savedPlace = ((typeof vscode.getState === 'function' && vscode.getState()) || {}).place;
+        let restoringPlace = !!savedPlace;
+        let placeSaveFrame = 0;
+        const savePlace = () => {
+            if (restoringPlace || placeSaveFrame || typeof vscode.setState !== 'function') {
+                return;
+            }
+            placeSaveFrame = requestAnimationFrame(() => {
+                placeSaveFrame = 0;
+                if (restoringPlace) {
+                    return;
+                }
+                const onLeft = !isInline && activePane === leftPane;
+                const state = (typeof vscode.getState === 'function' && vscode.getState()) || {};
+                vscode.setState(Object.assign({}, state, {
+                    place: {
+                        inline: isInline,
+                        folded: isFolded,
+                        pane: onLeft ? 'left' : 'right',
+                        top: (onLeft ? leftPane : rightPane).scrollTop,
+                    },
+                }));
+            });
+        };
 
         const toggleInline = () => {
             isInline = !isInline;
@@ -2514,6 +2544,7 @@ export function getWebviewContent(
             updateOverviewRulerVisibility();
             updateBreadcrumbs(leftPane, leftBreadcrumbs);
             updateBreadcrumbs(rightPane, rightBreadcrumbs);
+            savePlace();
         };
 
         const syncRulerToPane = (ruler, pane) => {
@@ -2585,6 +2616,7 @@ export function getWebviewContent(
                  statusMsg.textContent = '';
              }
                scheduleAsyncLayoutRefresh();
+               savePlace();
         };
 
         function applyFolding(pane, enable, paneType) {
@@ -3771,6 +3803,7 @@ export function getWebviewContent(
         rightPane.addEventListener('wheel', () => setActive(rightPane), { passive: true });
 
         leftPane.addEventListener('scroll', () => {
+             savePlace();
              if (!isInline) {
               if (shouldIgnoreMirroredScroll(leftPane)) return;
               syncScroll(leftPane, rightPane);
@@ -3779,6 +3812,7 @@ export function getWebviewContent(
         });
 
         rightPane.addEventListener('scroll', () => {
+             savePlace();
              if (!isInline) {
               if (shouldIgnoreMirroredScroll(rightPane)) return;
               syncScroll(rightPane, leftPane);
@@ -4720,6 +4754,41 @@ export function getWebviewContent(
       updateOverviewRulerVisibility();
       updateBreadcrumbs(leftPane, leftBreadcrumbs);
       updateBreadcrumbs(rightPane, rightBreadcrumbs);
+
+      // Take up the place the previous page kept (see savePlace). The page
+      // keeps growing for a while as diagrams, math and images lay out, so the
+      // scroll position is applied again until the reader scrolls, clicks or
+      // types, or the layout has had time to settle.
+      const restorePlace = (place) => {
+          if (!place) {
+              return;
+          }
+          if (!!place.inline !== isInline) {
+              toggleInline();
+          }
+          if (!!place.folded !== isFolded) {
+              toggleFold();
+          }
+          const pane = place.pane === 'left' && !isInline ? leftPane : rightPane;
+          const apply = () => {
+              if (!restoringPlace) {
+                  return;
+              }
+              activePane = pane;
+              pane.scrollTop = place.top;
+          };
+          const finish = () => {
+              restoringPlace = false;
+          };
+          ['wheel', 'pointerdown', 'keydown', 'touchstart'].forEach((type) => {
+              window.addEventListener(type, finish, { capture: true, passive: true, once: true });
+          });
+          apply();
+          requestAnimationFrame(apply);
+          [150, 400, 800, 1500].forEach((delay) => setTimeout(apply, delay));
+          setTimeout(finish, 1600);
+      };
+      restorePlace(savedPlace);
 
       // IMMEDIATE SIGNAL FOR VRT (Ensure update-snapshots always proceeds)
       setTimeout(() => {
