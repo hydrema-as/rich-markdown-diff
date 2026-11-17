@@ -21,5 +21,6 @@
   "rich-markdown-diff.defaultFoldUnchanged.description": "Whether to fold unchanged blocks by default when opening a diff panel.",
   "rich-markdown-diff.doubleClickAction.description": "What a double-click in a rendered diff opens.",
   "rich-markdown-diff.doubleClickAction.openSource": "The clicked side's file, at the clicked block.",
-  "rich-markdown-diff.doubleClickAction.openModifiedBeside": "The modified file as a text editor beside the diff, at the clicked block, from either pane. It opens as text even where workbench.editorAssociations maps Markdown to a preview, so text-editor features such as comment threads are at hand while the rendered diff stays open."
+  "rich-markdown-diff.doubleClickAction.openModifiedBeside": "The modified file as a text editor beside the diff, at the clicked block, from either pane. It opens as text even where workbench.editorAssociations maps Markdown to a preview, so text-editor features such as comment threads are at hand while the rendered diff stays open.",
+  "rich-markdown-diff.previewExtensions.description": "Extensions whose Markdown preview contributions the rendered diff uses too, as the built-in preview does: their markdown-it plugins (`extendMarkdownIt`), preview styles and preview scripts. Each entry is an extension ID such as `tillahoffmann.markdown-markup`, whose review comments then show in the diff. An extension that is not installed is skipped. A change applies to diffs opened after it."
 }

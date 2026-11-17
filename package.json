@@ -313,6 +313,16 @@
           ],
           "default": "openSource",
           "description": "%rich-markdown-diff.doubleClickAction.description%"
+        },
+        "rich-markdown-diff.previewExtensions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "tillahoffmann.markdown-markup"
+          ],
+          "markdownDescription": "%rich-markdown-diff.previewExtensions.description%"
         }
       }
     },

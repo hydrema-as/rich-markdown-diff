@@ -64,8 +64,17 @@ export function getWebviewContent(
   deletedColor: string = "",
   defaultViewMode: string = "side-by-side",
   defaultFoldUnchanged: boolean = false,
+  // Webview URIs of the style sheets and scripts other extensions contribute
+  // to the Markdown preview, loaded here too.
+  previewAssets: { styles: string[]; scripts: string[] } = { styles: [], scripts: [] },
 ): string {
   const nonce = crypto.randomBytes(16).toString("hex");
+  const previewStyleLinks = previewAssets.styles
+    .map((uri) => `<link rel="stylesheet" href="${escapeHtml(uri)}">`)
+    .join("\n    ");
+  const previewScriptTags = previewAssets.scripts
+    .map((uri) => `<script nonce="${nonce}" src="${escapeHtml(uri)}"></script>`)
+    .join("\n    ");
 
   const t = (key: string, ...args: any[]) => {
     let text = translations[key] || key;
@@ -2230,7 +2239,36 @@ export function getWebviewContent(
         }
         ${insertedColor ? `ins.diffins, ins.diffmod, .diff-col-ins { background-color: var(--custom-ins-bg) !important; }` : ""}
         ${deletedColor ? `del.diffdel, del.diffmod, .diff-col-del { background-color: var(--custom-del-bg) !important; }` : ""}
+
+        /* Review comments, as markdown-markup renders CriticMarkup: a .mm-mark
+           holding a hidden .mm-tip with the thread. settleReviewMarks turns the
+           diff's ins and del inside a thread into .mm-ins and .mm-del, which
+           count as no change, and marks a comment or reply one side lacks.
+           Each pane shows the comments of its own side. */
+        #left-pane .mm-ins,
+        #right-pane .mm-del,
+        #left-pane .mm-row.mm-only-new,
+        #right-pane .mm-row.mm-only-gone,
+        #left-pane .mm-mark.mm-point.mm-only-new,
+        #right-pane .mm-mark.mm-point.mm-only-gone {
+            display: none;
+        }
+        #left-pane .mm-mark.mm-only-new,
+        #right-pane .mm-mark.mm-only-gone {
+            cursor: inherit;
+        }
+        #left-pane .mm-mark.mm-only-new > .mm-anchor,
+        #right-pane .mm-mark.mm-only-gone > .mm-anchor {
+            background: none;
+            border-left: none;
+            padding: 0;
+        }
+        #left-pane .mm-mark.mm-only-new > .mm-tip,
+        #right-pane .mm-mark.mm-only-gone > .mm-tip {
+            display: none !important;
+        }
     </style>
+    ${previewStyleLinks}
 </head>
 <body class="VRT_LAYOUT_CLASS ${defaultViewMode === "inline" ? "inline-mode" : ""} ${marpCss ? "marp-mode" : ""} ${showGutterMarkers ? "show-gutter-markers" : ""} ${showGitBlame ? "show-git-blame" : ""}">
     <div class="toolbar">
@@ -2291,6 +2329,64 @@ export function getWebviewContent(
         const leftBreadcrumbs = document.getElementById('left-breadcrumbs');
         const rightBreadcrumbs = document.getElementById('right-breadcrumbs');
         const statusMsg = document.getElementById('status-msg');
+
+        // --- Review comments ---
+        // A comment is a note on the text, not a change to it. The diff's ins
+        // and del inside a comment's thread, and around a point comment's icon,
+        // become .mm-ins and .mm-del, so the gutter, the overview ruler and
+        // change navigation pass a paragraph whose comments alone changed. A
+        // comment or reply whose text is all on one side is marked
+        // .mm-only-new or .mm-only-gone, and the other pane leaves it out.
+        const settleReviewMarks = () => {
+            const sideOf = (el) => {
+                let added = false;
+                let removed = false;
+                const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+                while (walker.nextNode()) {
+                    const node = walker.currentNode;
+                    if (!node.nodeValue.trim()) {
+                        continue;
+                    }
+                    const parent = node.parentElement;
+                    if (parent.closest('.mm-ins')) {
+                        added = true;
+                    } else if (parent.closest('.mm-del')) {
+                        removed = true;
+                    } else {
+                        return 'both';
+                    }
+                }
+                return added && !removed ? 'new' : removed && !added ? 'gone' : 'both';
+            };
+            const mark = (el, side) => {
+                if (side === 'new') {
+                    el.classList.add('mm-only-new');
+                } else if (side === 'gone') {
+                    el.classList.add('mm-only-gone');
+                }
+            };
+            document.querySelectorAll('.mm-mark').forEach((markEl) => {
+                const tip = markEl.querySelector(':scope > .mm-tip');
+                if (!tip) {
+                    return;
+                }
+                const diffTags = Array.from(tip.querySelectorAll('ins, del'));
+                if (markEl.classList.contains('mm-point')) {
+                    diffTags.push(...Array.from(markEl.querySelectorAll(':scope > ins, :scope > del')));
+                }
+                diffTags.forEach((tag) => {
+                    const span = document.createElement('span');
+                    span.className = tag.tagName === 'INS' ? 'mm-ins' : 'mm-del';
+                    while (tag.firstChild) {
+                        span.appendChild(tag.firstChild);
+                    }
+                    tag.replaceWith(span);
+                });
+                tip.querySelectorAll(':scope > .mm-row').forEach((row) => mark(row, sideOf(row)));
+                mark(markEl, sideOf(tip));
+            });
+        };
+        settleReviewMarks();
 
         // --- Obsidian Handlers ---
         window.handleTagClick = (e, tag) => {
@@ -4949,6 +5045,7 @@ export function getWebviewContent(
           console.error('Failed to send ready signal:', e);
       }
     </script>
+    ${previewScriptTags}
     <script nonce="${nonce}">/* VRT_SCRIPT_PLACEHOLDER */</script>
 </body>
 </html>`;
